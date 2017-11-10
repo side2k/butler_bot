@@ -16,15 +16,50 @@ class Command(object):
         userdata["messages_received"] += 1
         userdata["data"][message.topic] = message.payload
 
+    def get_topic_list(self, root=None):
+        topics = []
+        root = root or self.config["data"]
+        for key, value in root.items():
+            if hasattr(value, "items"):
+                sub_topics = self.get_topic_list(root=value)
+                topics.extend(sub_topics)
+            else:
+                if type(value) == list:
+                    topic = value[0]
+                else:
+                    topic = value
+                topics.append(topic)
+        return topics
+
+    def format_output(self, root=None, level=0):
+        output = ""
+        root = root or self.config["data"]
+        indent = " " * self.config["indent_size"]
+
+        for label, item in root.items():
+            if hasattr(item, "items"):
+                output += "{}{}\n".format(indent*level, label)
+                output += self.format_output(item, level+1)
+            else:
+                if type(item) == list:
+                    topic, units = item
+                else:
+                    topic = item
+                    units = ""
+
+                value = self.user_data["data"].get(topic)
+                output += "{}{}:{}{}{}\n".format(
+                    indent*level, label, indent, value, units)
+        return output
+
     def execute(self, chat_id, args):
         client = Client(userdata=self.user_data)
 
-        connect_result = client.connect(self.config["mqtt_server"])
+        connect_result = client.connect(self.config["server"])
         if not connect_result == MQTT_ERR_SUCCESS:
             raise Exception("Client connection error {}".format(connect_result))
 
-        topics = self.config["topics"].keys()
-
+        topics = self.get_topic_list()
         for topic in topics:
             (subs_result, subs_id) = client.subscribe(topic)
 
@@ -42,12 +77,6 @@ class Command(object):
             if time.time() - time_start > 10:
                 break
 
-        for topic in topics:
-            if topic in self.user_data["data"]:
-                topic_label = self.config["topics"][topic]
-                topic_value = self.user_data["data"][topic]
-                message = u"{}: {}".format(
-                    topic_label, topic_value)
-                self.bot.sendMessage(
-                    chat_id,
-                    message.encode("utf-8"))
+        self.bot.sendMessage(
+            chat_id,
+            self.format_output())

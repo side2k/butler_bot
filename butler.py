@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from collections import OrderedDict
 from importlib import import_module
 import json
 import re
@@ -23,7 +24,7 @@ class Butler(telepot.Bot):
     def get_config(self, config_name="main"):
         try:
             with open("config/{}.json".format(config_name), "r") as config_file:
-                return json.load(config_file)
+                return json.load(config_file, object_pairs_hook=OrderedDict)
         except IOError:
             return None
         
@@ -77,7 +78,7 @@ class Butler(telepot.Bot):
         flavor = telepot.flavor(msg)
 
         msg_type, chat_type, chat_id = telepot.glance(msg, flavor=flavor)
-        print msg_type
+
         if msg_type == "text":
             commands = self.parse_commands(msg)
             if commands:
