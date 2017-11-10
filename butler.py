@@ -4,6 +4,7 @@ from importlib import import_module
 import json
 import re
 import sys
+import traceback
 import time
 
 import telepot
@@ -58,11 +59,15 @@ class Butler(telepot.Bot):
 
     def handle_command(self, chat_id, command):
         cmd_name = command["command"].strip(".")
+        error = None
 
         try:
             module = import_module(".{}".format(cmd_name), "commands")
-        except ImportError:
+        except ImportError, exc:
+            print "Error loading module for command '{}':".format(cmd_name)
+            print traceback.format_exc()
             module = None
+            error = exc.message
 
         if module:
             command = module.Command(self)
@@ -70,9 +75,7 @@ class Butler(telepot.Bot):
         else:
             self.sendMessage(
                 chat_id,
-                u"unknown command `{command[command]}` with argument "
-                "string `{command[args]}`".format(
-                    command=command))
+                u"Error: {}".format(error))
 
     def handle(self, msg):
         flavor = telepot.flavor(msg)
