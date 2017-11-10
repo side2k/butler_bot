@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from importlib import import_module
 import json
 import re
 import sys
@@ -7,7 +8,6 @@ import time
 import telepot
 from telepot.loop import MessageLoop
 
-from paho.mqtt.client import Client, MQTT_ERR_SUCCESS
 
 reload(sys)
 sys.setdefaultencoding('utf-8')
@@ -15,11 +15,17 @@ sys.setdefaultencoding('utf-8')
 
 class Butler(telepot.Bot):
     def __init__(self, *args, **kwargs):
-        with open("config/main.json", "r") as config_file:
-            self.config = json.load(config_file)
+        self.config = self.get_config()
 
         return super(Butler, self).__init__(
             self.config["token"], *args, **kwargs)
+
+    def get_config(self, config_name="main"):
+        try:
+            with open("config/{}.json".format(config_name), "r") as config_file:
+                return json.load(config_file)
+        except IOError:
+            return None
         
     def parse_commands(self, msg):
         entities = msg.get("entities", [])
@@ -50,11 +56,16 @@ class Butler(telepot.Bot):
         return commands
 
     def handle_command(self, chat_id, command):
-        cmd_name = command["command"]
+        cmd_name = command["command"].strip(".")
 
-        attr = getattr(self, "handle_cmd_{}".format(cmd_name), None)
-        if callable(attr):
-            attr(chat_id, command["args"])
+        try:
+            module = import_module(".{}".format(cmd_name), "commands")
+        except ImportError:
+            module = None
+
+        if module:
+            command = module.Command(self)
+            command.execute(chat_id, command)
         else:
             self.sendMessage(
                 chat_id,
@@ -62,55 +73,6 @@ class Butler(telepot.Bot):
                 "string `{command[args]}`".format(
                     command=command))
 
-    def handle_cmd_temp(self, chat_id, args):
-        with open("temperature_config.json", "r") as config_file:
-            config = json.load(config_file)
-
-
-        def on_message(client, userdata, message):
-            userdata["messages_received"] += 1
-            userdata["data"][message.topic] = message.payload
-
-        user_data = {
-            "messages_received": 0,
-            "data": {}
-        }
-        client = Client(userdata=user_data)
-        connect_result = client.connect(config["mqtt_server"])
-        if not connect_result == MQTT_ERR_SUCCESS:
-            raise Exception("Client connection error {}".format(connect_result))
-
-        topics = config["topics"].keys()
-
-        for topic in topics:
-            (subs_result, subs_id) = client.subscribe(topic)
-
-        client.on_message = on_message
-        if not subs_result == MQTT_ERR_SUCCESS:
-            raise Exception("Subscription error {}".format(subs_result))
-
-        time_start = time.time()
-        while True:
-            client.loop()
-
-            if user_data["messages_received"] >= len(topics):
-                break
-
-            if time.time() - time_start > 10:
-                break
-
-        for topic in topics:
-            if topic in user_data["data"]:
-                topic_label = config["topics"][topic]
-                topic_value = user_data["data"][topic]
-                message = u"{}: {}".format(
-                    topic_label, topic_value)
-                print message
-                self.sendMessage(
-                    chat_id,
-                    message.encode("utf-8"))
-        
-        
     def handle(self, msg):
         flavor = telepot.flavor(msg)
 
@@ -129,8 +91,6 @@ bot = Butler()
 
 MessageLoop(bot).run_as_thread()
 
-
-print 'Listening ...'
 
 # Keep the program running.
 while 1:
