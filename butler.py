@@ -15,7 +15,7 @@ sys.setdefaultencoding('utf-8')
 
 class Butler(telepot.Bot):
     def __init__(self, *args, **kwargs):
-        with open("butler_config.json", "r") as config_file:
+        with open("config/main.json", "r") as config_file:
             self.config = json.load(config_file)
 
         return super(Butler, self).__init__(
