@@ -92,6 +92,7 @@ bot = Butler()
 
 MessageLoop(bot).run_as_thread()
 
+print "Running bot..."
 
 # Keep the program running.
 while 1:
